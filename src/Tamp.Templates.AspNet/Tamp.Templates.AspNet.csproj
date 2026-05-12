@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <RootNamespace>Tamp.Templates.AspNet</RootNamespace>
+    <IsPackable>true</IsPackable>
+    <PackageId>Tamp.Templates.AspNet</PackageId>
+    <Description>Tamp scaffold template — ASP.NET Web API. Generates a minimal API project + a Tamp build script via `tamp init --template aspnet` (CLI 0.2.0+).</Description>
+    <PackageTags>$(PackageTags);aspnet;webapi</PackageTags>
+
+    <!--
+      Drift-protection metadata. Read by the CLI's NuGet template source at load time;
+      mismatch with the running CLI's own version aborts the init with a clean message.
+    -->
+    <TampTemplateName>aspnet</TampTemplateName>
+    <TampTemplateDescription>ASP.NET minimal-API web service with a Tamp build script (Compile / Test / Pack / Publish).</TampTemplateDescription>
+    <MinimumTampCoreVersion>1.4.0</MinimumTampCoreVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" />
+  </ItemGroup>
+
+  <!--
+    Template authors depend on Tamp.Core for the scaffold contracts (IScaffoldTemplate,
+    IScaffoldTemplateProvider, FileSpec, WriteMode, ScaffoldContext). Two modes:
+      package  — pinned reference via Directory.Packages.props (default; what consumers see)
+      project  — sibling ~/repos/tamp checkout (inner-loop iteration on contracts)
+  -->
+  <ItemGroup Condition="'$(TampCoreMode)' == 'package'">
+    <PackageReference Include="Tamp.Core" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TampCoreMode)' == 'project'">
+    <ProjectReference Include="$(TampCorePath)" />
+  </ItemGroup>
+
+  <!--
+    Surface the template-metadata properties to NuGet as package metadata. The CLI's
+    NuGetTemplateSource (v0.2.0+) reads these to gate drift and populate the list output.
+  -->
+  <ItemGroup>
+    <PackageMetadata Include="TampTemplateName" Value="$(TampTemplateName)" />
+    <PackageMetadata Include="TampTemplateDescription" Value="$(TampTemplateDescription)" />
+    <PackageMetadata Include="MinimumTampCoreVersion" Value="$(MinimumTampCoreVersion)" />
+  </ItemGroup>
+
+</Project>

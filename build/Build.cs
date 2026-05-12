@@ -1,0 +1,95 @@
+using Tamp;
+using Tamp.NetCli.V10;
+
+class Build : TampBuild
+{
+    public static int Main(string[] args) => Execute<Build>(args);
+
+    [Parameter("Build configuration")]
+    Configuration Configuration = IsLocalBuild ? Configuration.Debug : Configuration.Release;
+
+    [Parameter("Package version override", EnvironmentVariable = "PACKAGE_VERSION")]
+#pragma warning disable CS0649
+    readonly string? Version;
+#pragma warning restore CS0649
+
+    [Solution] readonly Solution Solution = null!;
+    [GitRepository] readonly GitRepository Git = null!;
+
+    [Secret("NuGet API key", EnvironmentVariable = "NUGET_API_KEY")]
+    readonly Secret NuGetApiKey = null!;
+
+    AbsolutePath Artifacts => RootDirectory / "artifacts";
+
+    Target Info => _ => _.Executes(() =>
+    {
+        Console.WriteLine($"  Branch:        {Git.Branch ?? "<detached>"}");
+        Console.WriteLine($"  Commit:        {Git.Commit[..7]}");
+        Console.WriteLine($"  Configuration: {Configuration}");
+    });
+
+    Target Clean => _ => _
+        .Executes(() =>
+        {
+            // Exclude the build script's own bin/obj — we're currently running from there.
+            // Deleting them mid-run would self-evict the Tamp.NetCli.V10 dll the Restore target needs.
+            var buildDir = (RootDirectory / "build").Value;
+            foreach (var d in RootDirectory.GlobDirectories("**/bin", "**/obj"))
+            {
+                if (d.Value.StartsWith(buildDir, StringComparison.Ordinal)) continue;
+                d.Delete();
+            }
+            Artifacts.Delete();
+        });
+
+    Target Restore => _ => _
+        .Internal()
+        .Executes(() => DotNet.Restore(s => s.SetProject(Solution.Path)));
+
+    Target Compile => _ => _
+        .DependsOn(Restore)
+        .Executes(() => DotNet.Build(s => s
+            .SetProject(Solution.Path)
+            .SetConfiguration(Configuration)
+            .SetNoRestore(true)));
+
+    Target Test => _ => _
+        .DependsOn(Compile)
+        .Description("Unit tests for every template package.")
+        .Executes(() => DotNet.Test(s => s
+            .SetProject(Solution.Path)
+            .SetConfiguration(Configuration)
+            .SetNoBuild(true)
+            .AddLogger("trx;LogFileName=test-results.trx")
+            .AddDataCollector("XPlat Code Coverage")
+            .SetSettings((RootDirectory / "build" / "coverlet.runsettings").Value)
+            .SetResultsDirectory(Artifacts / "test-results")));
+
+    Target Pack => _ => _
+        .DependsOn(Test)
+        .Description("Pack every Tamp.Templates.* package into ./artifacts.")
+        .Executes(() => DotNet.Pack(s =>
+        {
+            s.SetProject(RootDirectory / "src" / "Tamp.Templates.AspNet" / "Tamp.Templates.AspNet.csproj");
+            s.SetConfiguration(Configuration);
+            s.SetNoBuild(true);
+            s.SetOutput(Artifacts);
+            if (!string.IsNullOrEmpty(Version)) s.SetProperty("Version", Version);
+        }));
+
+    Target Push => _ => _
+        .DependsOn(Pack)
+        .Requires(() => NuGetApiKey != null)
+        .Executes(() => Artifacts.GlobFiles("*.nupkg")
+            .Select(p => DotNet.NuGetPush(s => s
+                .SetPackagePath(p)
+                .SetSource("https://api.nuget.org/v3/index.json")
+                .SetApiKey(NuGetApiKey)
+                .SetSkipDuplicate(true))));
+
+    Target Ci => _ => _.DependsOn(Info, Clean, Pack);
+
+    Target Default => _ => _
+        .Default()
+        .DependsOn(Compile);
+}

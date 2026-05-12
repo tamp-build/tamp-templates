@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="README.md" /><File Path="LICENSE" /><File Path="CHANGELOG.md" />
+    <File Path="Directory.Build.props" /><File Path="Directory.Packages.props" />
+    <File Path=".gitignore" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Tamp.Templates.AspNet/Tamp.Templates.AspNet.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Tamp.Templates.AspNet.Tests/Tamp.Templates.AspNet.Tests.csproj" />
+  </Folder>
+</Solution>
