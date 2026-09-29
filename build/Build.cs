@@ -1,8 +1,10 @@
 using Tamp;
 using Tamp.NetCli.V10;
 using Tamp.Telegram;
+using Tamp.Components;
+using Tamp.Components.NetCli.V10;
 
-class Build : TampBuild
+class Build : TampBuild, IDotNetTest, IDotNetPack
 {
     public static int Main(string[] args) => Execute<Build>(args);
 
@@ -13,20 +15,18 @@ class Build : TampBuild
         TelegramBuildReporter.FromEnvironment();
 
     [Parameter("Build configuration")]
-    Configuration Configuration = IsLocalBuild ? Configuration.Debug : Configuration.Release;
+    public Configuration Configuration { get; set; } = IsLocalBuild ? Configuration.Debug : Configuration.Release;
 
-    [Parameter("Package version override", EnvironmentVariable = "PACKAGE_VERSION")]
-#pragma warning disable CS0649
-    readonly string? Version;
-#pragma warning restore CS0649
 
-    [Solution] readonly Solution Solution = null!;
+    [Solution] public Solution Solution { get; set; } = null!;
     [GitRepository] readonly GitRepository Git = null!;
 
     [Secret("NuGet API key", EnvironmentVariable = "NUGET_API_KEY")]
     readonly Secret NuGetApiKey = null!;
 
     AbsolutePath Artifacts => RootDirectory / "artifacts";
+
+    public AbsolutePath ArtifactsDirectory => Artifacts;
 
     Target Info => _ => _.Executes(() =>
     {
@@ -39,43 +39,8 @@ class Build : TampBuild
         .Description("Delete bin/obj and the artifacts directory.")
         .Executes(() => CleanArtifacts());
 
-    Target Restore => _ => _
-        .Internal()
-        .Executes(() => DotNet.Restore(s => s.SetProject(Solution.Path)));
-
-    Target Compile => _ => _
-        .DependsOn(Restore)
-        .Executes(() => DotNet.Build(s => s
-            .SetProject(Solution.Path)
-            .SetConfiguration(Configuration)
-            .SetNoRestore(true)));
-
-    Target Test => _ => _
-        .DependsOn(Compile)
-        .Description("Unit tests for every template package.")
-        .Executes(() => DotNet.Test(s => s
-            .SetProject(Solution.Path)
-            .SetConfiguration(Configuration)
-            .SetNoBuild(true)
-            .AddLogger("trx;LogFileName=test-results.trx")
-            .AddDataCollector("XPlat Code Coverage")
-            .SetSettings((RootDirectory / "build" / "coverlet.runsettings").Value)
-            .SetResultsDirectory(Artifacts / "test-results")));
-
-    Target Pack => _ => _
-        .DependsOn(Test)
-        .Description("Pack every Tamp.Templates.* package into ./artifacts.")
-        .Executes(() => DotNet.Pack(s =>
-        {
-            s.SetProject(RootDirectory / "src" / "Tamp.Templates.AspNet" / "Tamp.Templates.AspNet.csproj");
-            s.SetConfiguration(Configuration);
-            s.SetNoBuild(true);
-            s.SetOutput(Artifacts);
-            if (!string.IsNullOrEmpty(Version)) s.SetProperty("Version", Version);
-        }));
-
     Target Push => _ => _
-        .DependsOn(Pack)
+        .DependsOn(nameof(IPack.Pack))
         .Requires(() => NuGetApiKey != null)
         .Executes(() => Artifacts.GlobFiles("*.nupkg")
             .Select(p => DotNet.NuGetPush(s => s
@@ -84,9 +49,9 @@ class Build : TampBuild
                 .SetApiKey(NuGetApiKey)
                 .SetSkipDuplicate(true))));
 
-    Target Ci => _ => _.DependsOn(Info, Clean, Pack);
+    Target Ci => _ => _.DependsOn(nameof(Info), nameof(Clean), nameof(ITest.Test), nameof(IPack.Pack));
 
     Target Default => _ => _
         .Default()
-        .DependsOn(Compile);
+        .DependsOn(nameof(ICompile.Compile));
 }
