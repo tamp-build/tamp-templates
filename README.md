@@ -65,7 +65,7 @@ Csproj surface — note the four `<Tamp*>` metadata properties the CLI's NuGet s
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     <PackageId>Foo.Tamp.Templates.MyShape</PackageId>
     <IsPackable>true</IsPackable>
 
